@@ -3,6 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/upamune/zstate)](https://goreportcard.com/report/github.com/upamune/zstate)
 [![GoDoc](https://godoc.org/github.com/upamune/zstate?status.svg)](https://godoc.org/github.com/upamune/zstate)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![codecov](https://codecov.io/github/upamune/zstate/graph/badge.svg?token=GPJ6L4P8AO)](https://codecov.io/github/upamune/zstate)
 
 zstate is a simple and type-safe state machine library for Go. It allows you to manage complex state transitions and clearly express business logic.
 
@@ -105,7 +106,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Support
 
-If you have any questions or feedback, please open an issue on [GitHub Issues](https://github.com/upamune/zstate/issues).
+If you have any questions or feedback, please open an issue on [GitHub Issues](https://github.com/upamune/z-state/issues).
 
 ---
 

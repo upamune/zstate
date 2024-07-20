@@ -5,13 +5,17 @@ GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOFORMAT=gofmt -s -w .
+GOVET=$(GOCMD) vet
 
 # Main package path
 MAIN_PACKAGE=github.com/upamune/zstate
 
-.PHONY: all test coverage clean format help
+.PHONY: all test lint coverage clean format help
 
 all: test
+
+lint: ## Run go vet
+	$(GOVET) ./...
 
 test: ## Run tests
 	$(GOTEST) -count=1 -race -shuffle=on -v ./...

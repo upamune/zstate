@@ -25,6 +25,7 @@ const (
 )
 
 func TestDoorStateMachine(t *testing.T) {
+	t.Parallel()
 	var isLocked bool
 
 	doorBuilder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
@@ -136,6 +137,7 @@ func (e *DoorEventWithCallback) AfterTransition(ctx context.Context) {
 }
 
 func TestBeforeAfterTransitionEvents(t *testing.T) {
+	t.Parallel()
 	doorBuilder := zstate.NewStateMachineBuilder[DoorState, *DoorEventWithCallback]()
 	door, err := doorBuilder.
 		AddState(Closed).
@@ -188,6 +190,7 @@ const (
 )
 
 func TestOrderStateMachine(t *testing.T) {
+	t.Parallel()
 	var orderAmount float64
 	var isStockAvailable bool
 

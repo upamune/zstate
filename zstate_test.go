@@ -293,3 +293,48 @@ func TestOrderStateMachine(t *testing.T) {
 		}
 	})
 }
+
+func TestStateMachineBuilderErrors(t *testing.T) {
+	type testCase struct {
+		name          string
+		setup         func(zstate.StateMachineBuilder[string, string])
+		expectedError string
+	}
+
+	tests := []testCase{
+		{
+			name:          "No states added",
+			setup:         func(b zstate.StateMachineBuilder[string, string]) {},
+			expectedError: "state machine must have at least one state",
+		},
+		{
+			name: "Initial state not set",
+			setup: func(b zstate.StateMachineBuilder[string, string]) {
+				b.AddState("State1")
+			},
+			expectedError: "initial state must be set",
+		},
+		{
+			name: "Invalid initial state",
+			setup: func(b zstate.StateMachineBuilder[string, string]) {
+				b.AddState("State1")
+				b.SetInitialState("InvalidState")
+			},
+			expectedError: "initial state must be a valid state",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			builder := zstate.NewStateMachineBuilder[string, string]()
+			tc.setup(builder)
+			_, err := builder.Build()
+
+			if err == nil {
+				t.Errorf("Expected error, but got nil")
+			} else if err.Error() != tc.expectedError {
+				t.Errorf("Expected error '%s', but got '%s'", tc.expectedError, err.Error())
+			}
+		})
+	}
+}

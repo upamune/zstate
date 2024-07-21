@@ -31,33 +31,32 @@ package main
 import (
     "context"
     "fmt"
-
     "github.com/upamune/zstate"
 )
 
 type DoorState int
 
 const (
-    Closed DoorState = iota
-    Open
-    Locked
+	Closed DoorState = iota
+	Open
+	Locked
 )
 
 type DoorEvent string
 
 const (
-    OpenDoor  DoorEvent = "OpenDoor"
-    CloseDoor DoorEvent = "CloseDoor"
-    LockDoor  DoorEvent = "LockDoor"
-    UnlockDoor DoorEvent = "UnlockDoor"
+	OpenDoor  DoorEvent = "OpenDoor"
+	CloseDoor DoorEvent = "CloseDoor"
+	LockDoor  DoorEvent = "LockDoor"
+	UnlockDoor DoorEvent = "UnlockDoor"
 )
 
 func main() {
-    doorBuilder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
-    door, _ := doorBuilder.
-        AddState(Closed).
-        AddState(Open).
-        AddState(Locked).
+	doorBuilder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
+	door, _ := doorBuilder.
+		AddState(Closed).
+		AddState(Open).
+		AddState(Locked).
 		AddTransition(Closed, Open, OpenDoor,
 			zstate.WithBefore[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) {
 				fmt.Println("Before opening the door")
@@ -66,22 +65,22 @@ func main() {
 				fmt.Println("After opening the door")
 			}),
 		).
-        AddTransition(Open, Closed, CloseDoor).
-        AddTransition(Closed, Locked, LockDoor, zstate.WithGuard[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) bool {
-            // Some condition to allow locking
-            return true
-        })).
-        AddTransition(Locked, Closed, UnlockDoor).
-        Build()
+		AddTransition(Open, Closed, CloseDoor).
+		AddTransition(Closed, Locked, LockDoor, zstate.WithGuard[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) bool {
+			// Some condition to allow locking
+			return true
+		})).
+		AddTransition(Locked, Closed, UnlockDoor).
+		Build()
 
-    ctx := context.Background()
-    
-    newState, err := door.Trigger(ctx, Closed, OpenDoor)
-    if err != nil {
-        fmt.Printf("Error: %v\n", err)
-        return
-    }
-    fmt.Printf("New state: %v\n", newState)
+	ctx := context.Background()
+
+	newState, err := door.Trigger(ctx, Closed, OpenDoor)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	fmt.Printf("New state: %v\n", newState)
 }
 ```
 
@@ -119,6 +118,18 @@ if err != nil {
 }
 fmt.Println(diagram)
 ```
+
+```mermaid
+stateDiagram-v2
+    Closed
+    Locked : [*] Locked
+    Open
+    Closed --> Locked : LockDoor
+    Closed --> Open : OpenDoor
+    Locked --> Closed : UnlockDoor
+    Open --> Closed : CloseDoor
+```
+
 
 This function supports two formats:
 - `MermaidFormat`: Generates a Mermaid.js compatible diagram

@@ -10,7 +10,7 @@ GOVET=$(GOCMD) vet
 # Main package path
 MAIN_PACKAGE=github.com/upamune/zstate
 
-.PHONY: all test lint coverage clean format help
+.PHONY: all test test-with-update lint coverage clean format help
 
 all: test
 
@@ -19,6 +19,9 @@ lint: ## Run go vet
 
 test: ## Run tests
 	$(GOTEST) -count=1 -race -shuffle=on -v ./...
+
+test-with-update: ## Run tests with update testdata
+	$(GOTEST) -count=1 -race -shuffle=on -v -update ./...
 
 coverage: ## Run tests with coverage
 	$(GOTEST) -coverprofile=coverage.out ./...

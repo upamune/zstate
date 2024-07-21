@@ -2,339 +2,146 @@ package zstate_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/upamune/zstate"
 )
 
-type DoorState int
+type DoorState string
 
 const (
-	Closed DoorState = iota
-	Open
-	Locked
+	Closed DoorState = "Closed"
+	Open   DoorState = "Open"
+	Locked DoorState = "Locked"
 )
 
-type DoorEvent int
+type DoorEvent string
 
 const (
-	OpenDoor DoorEvent = iota
-	CloseDoor
-	LockDoor
-	UnlockDoor
+	OpenDoor   DoorEvent = "OpenDoor"
+	CloseDoor  DoorEvent = "CloseDoor"
+	LockDoor   DoorEvent = "LockDoor"
+	UnlockDoor DoorEvent = "UnlockDoor"
 )
 
-func TestDoorStateMachine(t *testing.T) {
+func TestStateMachine(t *testing.T) {
 	t.Parallel()
-	var isLocked bool
 
-	doorBuilder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
-	door, err := doorBuilder.
+	ctx := context.Background()
+
+	t.Run("no states", func(t *testing.T) {
+		builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
+		_, err := builder.Build()
+		if err == nil {
+			t.Fatalf("Expected error, got nil")
+		}
+	})
+
+	t.Run("Basic Transitions", func(t *testing.T) {
+		sm := buildDoorStateMachine(t)
+
+		newState, err := sm.Trigger(ctx, Closed, OpenDoor)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if newState != Open {
+			t.Errorf("Expected state Open, got %v", newState)
+		}
+
+		newState, err = sm.Trigger(ctx, Open, CloseDoor)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if newState != Closed {
+			t.Errorf("Expected state Closed, got %v", newState)
+		}
+	})
+
+	t.Run("No Transition", func(t *testing.T) {
+		sm := buildDoorStateMachine(t)
+
+		_, err := sm.Trigger(ctx, Closed, UnlockDoor)
+		var noTransitionErr *zstate.NoTransitionError[DoorState, DoorEvent]
+		if !errors.As(err, &noTransitionErr) {
+			t.Fatalf("Expected NoTransitionError, got %v", err)
+		}
+	})
+
+	t.Run("WithBefore and WithAfter", func(t *testing.T) {
+		var beforeCalled, afterCalled bool
+		builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
+		sm, err := builder.
+			AddState(Closed).
+			AddState(Open).
+			AddTransition(Closed, Open, OpenDoor,
+				zstate.WithBefore[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) {
+					beforeCalled = true
+				}),
+				zstate.WithAfter[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) {
+					afterCalled = true
+				}),
+			).
+			Build()
+
+		if err != nil {
+			t.Fatalf("Failed to build state machine: %v", err)
+		}
+
+		_, err = sm.Trigger(context.Background(), Closed, OpenDoor)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+
+		if !beforeCalled {
+			t.Error("Before callback was not called")
+		}
+		if !afterCalled {
+			t.Error("After callback was not called")
+		}
+	})
+
+	t.Run("Guard Condition", func(t *testing.T) {
+		builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
+		sm, err := builder.
+			AddState(Closed).
+			AddState(Open).
+			AddState(Locked).
+			AddTransition(Closed, Locked, LockDoor, zstate.WithGuard[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) bool {
+				return false // Always return false to test guard condition
+			})).
+			Build()
+
+		if err != nil {
+			t.Fatalf("Failed to build state machine: %v", err)
+		}
+
+		_, err = sm.Trigger(context.Background(), Closed, LockDoor)
+		var guardErr *zstate.GuardError[DoorState, DoorEvent]
+		if !errors.As(err, &guardErr) {
+			t.Fatalf("Expected GuardError, got %T: %v", err, err)
+		}
+	})
+}
+
+func buildDoorStateMachine(t *testing.T) *zstate.StateMachine[DoorState, DoorEvent] {
+	t.Helper()
+
+	builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
+	sm, err := builder.
 		AddState(Closed).
 		AddState(Open).
 		AddState(Locked).
-		SetInitialState(Closed).
 		AddTransition(Closed, Open, OpenDoor).
 		AddTransition(Open, Closed, CloseDoor).
 		AddTransition(Closed, Locked, LockDoor, zstate.WithGuard[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) bool {
-			return !isLocked
+			return from == Closed // Can only lock when closed
 		})).
 		AddTransition(Locked, Closed, UnlockDoor).
 		Build()
 
 	if err != nil {
-		t.Fatalf("Error building state machine: %v", err)
+		t.Fatalf("Failed to build state machine: %v", err)
 	}
-
-	ctx := context.Background()
-
-	t.Run("Initial State", func(t *testing.T) {
-		if door.GetCurrentState() != Closed {
-			t.Errorf("Expected initial state to be Closed, got %v", door.GetCurrentState())
-		}
-	})
-
-	t.Run("Valid Transition", func(t *testing.T) {
-		err := door.Trigger(ctx, OpenDoor)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if door.GetCurrentState() != Open {
-			t.Errorf("Expected state to be Open, got %v", door.GetCurrentState())
-		}
-	})
-
-	t.Run("Invalid Transition", func(t *testing.T) {
-		err := door.Trigger(ctx, LockDoor) // Can't lock an open door
-		if err == nil {
-			t.Error("Expected error for invalid transition, got nil")
-		}
-	})
-
-	t.Run("Guard Function", func(t *testing.T) {
-		_ = door.Trigger(ctx, CloseDoor) // Close the door first
-		isLocked = false
-		err := door.Trigger(ctx, LockDoor)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if door.GetCurrentState() != Locked {
-			t.Errorf("Expected state to be Locked, got %v", door.GetCurrentState())
-		}
-
-		isLocked = true
-		err = door.Trigger(ctx, UnlockDoor)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-		if door.GetCurrentState() != Closed {
-			t.Errorf("Expected state to be Closed, got %v", door.GetCurrentState())
-		}
-
-		err = door.Trigger(ctx, LockDoor)
-		if err == nil {
-			t.Error("Expected error due to guard function, got nil")
-		}
-		if door.GetCurrentState() != Closed {
-			t.Errorf("Expected state to remain Closed, got %v", door.GetCurrentState())
-		}
-	})
-
-	t.Run("Multiple Transitions", func(t *testing.T) {
-		transitions := []DoorEvent{OpenDoor, CloseDoor, LockDoor, UnlockDoor}
-		expectedStates := []DoorState{Open, Closed, Locked, Closed}
-
-		for i, transition := range transitions {
-			isLocked = false // Reset lock for each transition
-			err := door.Trigger(ctx, transition)
-			if err != nil {
-				t.Errorf("Unexpected error on transition %v: %v", transition, err)
-			}
-			if door.GetCurrentState() != expectedStates[i] {
-				t.Errorf("Expected state to be %v, got %v", expectedStates[i], door.GetCurrentState())
-			}
-		}
-	})
-}
-
-// DoorEventWithCallback implements both BeforeTransitionEvent and AfterTransitionEvent
-type DoorEventWithCallback struct {
-	DoorEvent
-	BeforeCalled bool
-	AfterCalled  bool
-}
-
-var (
-	open DoorEventWithCallback = DoorEventWithCallback{DoorEvent: OpenDoor}
-)
-
-func (e *DoorEventWithCallback) BeforeTransition(ctx context.Context) {
-	e.BeforeCalled = true
-}
-
-func (e *DoorEventWithCallback) AfterTransition(ctx context.Context) {
-	e.AfterCalled = true
-}
-
-func TestBeforeAfterTransitionEvents(t *testing.T) {
-	t.Parallel()
-	doorBuilder := zstate.NewStateMachineBuilder[DoorState, *DoorEventWithCallback]()
-	door, err := doorBuilder.
-		AddState(Closed).
-		AddState(Open).
-		SetInitialState(Closed).
-		AddTransition(Closed, Open, &open).
-		Build()
-	if err != nil {
-		t.Fatalf("failed to build state machine: %v", err)
-	}
-
-	ctx := context.Background()
-	event := &open
-	if err := door.Trigger(ctx, event); err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	if !event.BeforeCalled {
-		t.Error("BeforeTransition was not called")
-	}
-	if !event.AfterCalled {
-		t.Error("AfterTransition was not called")
-	}
-	if door.GetCurrentState() != Open {
-		t.Errorf("Expected state to be Open, got %v", door.GetCurrentState())
-	}
-}
-
-// OrderState represents the possible states of an order
-type OrderState int
-
-const (
-	Created OrderState = iota
-	PaymentPending
-	Paid
-	Shipped
-	Delivered
-	Cancelled
-)
-
-// OrderEvent represents the possible events that can occur in the order process
-type OrderEvent string
-
-const (
-	SubmitPayment  OrderEvent = "SubmitPayment"
-	ConfirmPayment OrderEvent = "ConfirmPayment"
-	ShipOrder      OrderEvent = "ShipOrder"
-	DeliverOrder   OrderEvent = "DeliverOrder"
-	CancelOrder    OrderEvent = "CancelOrder"
-)
-
-func TestOrderStateMachine(t *testing.T) {
-	t.Parallel()
-	var orderAmount float64
-	var isStockAvailable bool
-
-	orderBuilder := zstate.NewStateMachineBuilder[OrderState, OrderEvent]()
-	order, err := orderBuilder.
-		AddState(Created).
-		AddState(PaymentPending).
-		AddState(Paid).
-		AddState(Shipped).
-		AddState(Delivered).
-		AddState(Cancelled).
-		SetInitialState(Created).
-		AddTransition(Created, PaymentPending, SubmitPayment).
-		AddTransition(PaymentPending, Paid, ConfirmPayment,
-			zstate.WithGuard[OrderState, OrderEvent](func(ctx context.Context, from, to OrderState, event OrderEvent) bool {
-				return orderAmount >= 100.0 // Assuming minimum order amount is 100
-			})).
-		AddTransition(Paid, Shipped, ShipOrder,
-			zstate.WithGuard[OrderState, OrderEvent](func(ctx context.Context, from, to OrderState, event OrderEvent) bool {
-				return isStockAvailable
-			})).
-		AddTransition(Shipped, Delivered, DeliverOrder).
-		AddTransition(Created, Cancelled, CancelOrder).
-		AddTransition(PaymentPending, Cancelled, CancelOrder).
-		AddTransition(Paid, Cancelled, CancelOrder).
-		Build()
-
-	if err != nil {
-		t.Fatalf("Error building state machine: %v", err)
-	}
-
-	ctx := context.Background()
-
-	t.Run("Initial State", func(t *testing.T) {
-		if order.GetCurrentState() != Created {
-			t.Errorf("Expected initial state to be Created, got %v", order.GetCurrentState())
-		}
-	})
-
-	t.Run("Valid Transition Sequence", func(t *testing.T) {
-		orderAmount = 100.0
-		isStockAvailable = true
-
-		events := []OrderEvent{SubmitPayment, ConfirmPayment, ShipOrder, DeliverOrder}
-		expectedStates := []OrderState{PaymentPending, Paid, Shipped, Delivered}
-
-		for i, event := range events {
-			err := order.Trigger(ctx, event)
-			if err != nil {
-				t.Errorf("Unexpected error on event %v: %v", event, err)
-			}
-			if order.GetCurrentState() != expectedStates[i] {
-				t.Errorf("Expected state to be %v, got %v", expectedStates[i], order.GetCurrentState())
-			}
-		}
-	})
-
-	t.Run("Guard Function - Insufficient Payment", func(t *testing.T) {
-		order, _ = orderBuilder.Build() // Reset the state machine
-		orderAmount = 50.0
-
-		_ = order.Trigger(ctx, SubmitPayment)
-		err := order.Trigger(ctx, ConfirmPayment)
-		if err == nil {
-			t.Error("Expected error due to insufficient payment, got nil")
-		}
-		if order.GetCurrentState() != PaymentPending {
-			t.Errorf("Expected state to remain PaymentPending, got %v", order.GetCurrentState())
-		}
-	})
-
-	t.Run("Guard Function - Out of Stock", func(t *testing.T) {
-		order, _ = orderBuilder.Build() // Reset the state machine
-		orderAmount = 100.0
-		isStockAvailable = false
-
-		_ = order.Trigger(ctx, SubmitPayment)
-		_ = order.Trigger(ctx, ConfirmPayment)
-		err := order.Trigger(ctx, ShipOrder)
-		if err == nil {
-			t.Error("Expected error due to out of stock, got nil")
-		}
-		if order.GetCurrentState() != Paid {
-			t.Errorf("Expected state to remain Paid, got %v", order.GetCurrentState())
-		}
-	})
-
-	t.Run("Cancel Order", func(t *testing.T) {
-		order, _ = orderBuilder.Build() // Reset the state machine
-
-		_ = order.Trigger(ctx, SubmitPayment)
-		_ = order.Trigger(ctx, ConfirmPayment)
-
-		err := order.Trigger(ctx, CancelOrder)
-		if err != nil {
-			t.Errorf("Unexpected error on cancelling order: %v", err)
-		}
-		if order.GetCurrentState() != Cancelled {
-			t.Errorf("Expected state to be Cancelled, got %v", order.GetCurrentState())
-		}
-	})
-}
-
-func TestStateMachineBuilderErrors(t *testing.T) {
-	type testCase struct {
-		name          string
-		setup         func(zstate.StateMachineBuilder[string, string])
-		expectedError string
-	}
-
-	tests := []testCase{
-		{
-			name:          "No states added",
-			setup:         func(b zstate.StateMachineBuilder[string, string]) {},
-			expectedError: "state machine must have at least one state",
-		},
-		{
-			name: "Initial state not set",
-			setup: func(b zstate.StateMachineBuilder[string, string]) {
-				b.AddState("State1")
-			},
-			expectedError: "initial state must be set",
-		},
-		{
-			name: "Invalid initial state",
-			setup: func(b zstate.StateMachineBuilder[string, string]) {
-				b.AddState("State1")
-				b.SetInitialState("InvalidState")
-			},
-			expectedError: "initial state must be a valid state",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			builder := zstate.NewStateMachineBuilder[string, string]()
-			tc.setup(builder)
-			_, err := builder.Build()
-
-			if err == nil {
-				t.Errorf("Expected error, but got nil")
-			} else if err.Error() != tc.expectedError {
-				t.Errorf("Expected error '%s', but got '%s'", tc.expectedError, err.Error())
-			}
-		})
-	}
+	return sm
 }

@@ -1,0 +1,9 @@
+digraph StateMachine {
+    "Closed" [shape=circle];
+    "Locked" [shape=circle];
+    "Open" [shape=doublecircle, style=filled, fillcolor=lightblue];
+    "Closed" -> "Locked" [label="LockDoor"];
+    "Closed" -> "Open" [label="OpenDoor"];
+    "Locked" -> "Closed" [label="UnlockDoor"];
+    "Open" -> "Closed" [label="CloseDoor"];
+}

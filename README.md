@@ -13,16 +13,17 @@ zstate is a simple and type-safe state machine library for Go. It allows you to 
 - 🛠 **Flexible**: Control transitions with custom guard functions
 - 🧩 **Simple API**: Easy to use with an intuitive builder pattern
 - 📦 **No Dependencies**: Uses only the standard library
+- 🎨 **Visualization**: Generate state machine diagrams for documentation and debugging
 
 ## Installation
 
 ```bash
-go get github.com/upamune/zstate
+go get -u github.com/upamune/zstate
 ```
 
 ## Usage Example
 
-Here's an example of a state machine managing a door's state, including a guard function:
+Here's a simple example of a state machine managing a door's state:
 
 ```go
 package main
@@ -30,6 +31,7 @@ package main
 import (
     "context"
     "fmt"
+
     "github.com/upamune/zstate"
 )
 
@@ -51,46 +53,78 @@ const (
 )
 
 func main() {
-    var isLocked bool
-
     doorBuilder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
     door, _ := doorBuilder.
         AddState(Closed).
         AddState(Open).
         AddState(Locked).
-        SetInitialState(Closed).
-        AddTransition(Closed, Open, OpenDoor).
+		AddTransition(Closed, Open, OpenDoor,
+			zstate.WithBefore[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) {
+				fmt.Println("Before opening the door")
+			}),
+			zstate.WithAfter[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) {
+				fmt.Println("After opening the door")
+			}),
+		).
         AddTransition(Open, Closed, CloseDoor).
         AddTransition(Closed, Locked, LockDoor, zstate.WithGuard[DoorState, DoorEvent](func(ctx context.Context, from, to DoorState, event DoorEvent) bool {
-            return !isLocked
+            // Some condition to allow locking
+            return true
         })).
         AddTransition(Locked, Closed, UnlockDoor).
         Build()
 
     ctx := context.Background()
     
-    fmt.Println(door.GetCurrentState()) // Output: Closed
-    
-    _ = door.Trigger(ctx, OpenDoor)
-    fmt.Println(door.GetCurrentState()) // Output: Open
-    
-    _ = door.Trigger(ctx, CloseDoor)
-    fmt.Println(door.GetCurrentState()) // Output: Closed
-    
-    isLocked = true
-    err := door.Trigger(ctx, LockDoor)
+    newState, err := door.Trigger(ctx, Closed, OpenDoor)
     if err != nil {
-        fmt.Println("Cannot lock the door") // This will be printed
+        fmt.Printf("Error: %v\n", err)
+        return
     }
-    fmt.Println(door.GetCurrentState()) // Output: Closed
-
-    isLocked = false
-    _ = door.Trigger(ctx, LockDoor)
-    fmt.Println(door.GetCurrentState()) // Output: Locked
+    fmt.Printf("New state: %v\n", newState)
 }
 ```
 
-In this example, we've added a guard function to the `LockDoor` transition. The door can only be locked if `isLocked` is false. This demonstrates how you can use external conditions to control state transitions.
+## Error Handling
+
+zstate provides custom error types for more precise error handling:
+
+```go
+newState, err := sm.Trigger(ctx, currentState, event)
+if err != nil {
+    var noTransitionErr *zstate.NoTransitionError[DoorState, DoorEvent]
+    var guardErr *zstate.GuardError[DoorState, DoorEvent]
+
+    if errors.As(err, &noTransitionErr) {
+        fmt.Printf("No transition found: %v\n", noTransitionErr)
+    } else if errors.As(err, &guardErr) {
+        fmt.Printf("Guard condition not met: %v\n", guardErr)
+    } else {
+        fmt.Printf("Unexpected error: %v\n", err)
+    }
+    return
+}
+
+```
+
+## Visualization
+
+zstate provides a function to generate state machine diagrams:
+
+```go
+diagram, err := zstate.GenerateDiagram(sm, zstate.MermaidFormat, currentState)
+if err != nil {
+    fmt.Printf("Error generating diagram: %v\n", err)
+    return
+}
+fmt.Println(diagram)
+```
+
+This function supports two formats:
+- `MermaidFormat`: Generates a Mermaid.js compatible diagram
+- `DOTFormat`: Generates a DOT language diagram
+
+The current state is highlighted in the generated diagram, making it easy to visualize the state machine's current status.
 
 ## Documentation
 
@@ -106,7 +140,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Support
 
-If you have any questions or feedback, please open an issue on [GitHub Issues](https://github.com/upamune/z-state/issues).
+If you have any questions or feedback, please open an issue on [GitHub Issues](https://github.com/upamune/zstate/issues).
 
 ---
 

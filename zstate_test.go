@@ -31,6 +31,7 @@ func TestStateMachine(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("no states", func(t *testing.T) {
+		t.Parallel()
 		builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
 		_, err := builder.Build()
 		if err == nil {
@@ -39,6 +40,7 @@ func TestStateMachine(t *testing.T) {
 	})
 
 	t.Run("Basic Transitions", func(t *testing.T) {
+		t.Parallel()
 		sm := buildDoorStateMachine(t)
 
 		newState, err := sm.Trigger(ctx, Closed, OpenDoor)
@@ -59,6 +61,7 @@ func TestStateMachine(t *testing.T) {
 	})
 
 	t.Run("No Transition", func(t *testing.T) {
+		t.Parallel()
 		sm := buildDoorStateMachine(t)
 
 		_, err := sm.Trigger(ctx, Closed, UnlockDoor)
@@ -69,6 +72,7 @@ func TestStateMachine(t *testing.T) {
 	})
 
 	t.Run("WithBefore and WithAfter", func(t *testing.T) {
+		t.Parallel()
 		var beforeCalled, afterCalled bool
 		builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
 		sm, err := builder.
@@ -102,6 +106,7 @@ func TestStateMachine(t *testing.T) {
 	})
 
 	t.Run("Guard Condition", func(t *testing.T) {
+		t.Parallel()
 		builder := zstate.NewStateMachineBuilder[DoorState, DoorEvent]()
 		sm, err := builder.
 			AddState(Closed).
